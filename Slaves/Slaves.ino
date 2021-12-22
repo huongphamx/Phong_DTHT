@@ -5,21 +5,60 @@
 #include <HTTPClient.h>
 #include <BlynkSimpleEsp32.h>
 #include <esp_now.h>
+#include <esp_wifi.h>
+#include "time.h"
+#include <TimeLib.h>
+#include <WidgetRTC.h>
 
 #define BLYNK_PRINT Serial
+
+// Lấy thời gian từ NTP server
+const char* ntpServer = "pool.ntp.org";
+const long  gmtOffset_sec = 7*60*60;
+const int   daylightOffset_sec = 0;
+char timeHour[3];
+char timeMin[3];
 
 unsigned long previousMillis = 0;
 // Thời gian delay gửi dữ liệu lên sheet
 const long timedelay = 10000;
-// Thay bằng token lấy từ Blynk
-char auth[] = "_UdXyXEsqedKwODLofMX1etn24ZCEJFk";
+// Bỏ comment dòng Blynk token tương ứng với từng mạch giá nuôi
+char auth[] = "dakSG7QNxiYOVnT3kPJTShAMBeFjAuRw"; // Giá A
+// char auth[] = "XmD4p3tLrF0tGTSjC15Tjg_wjze2RsS7" // Giá B
+// char auth[] = "gegz_7L_KsPGNy5van4fMi2kQ7dCqgb2" // Giá C
+// char auth[] = "1bz-1ss7LPDZH8o8ADINjv-yRBFHRPV-" // Giá D
+
+BlynkTimer timer;
+WidgetRTC rtc;
+WiFiClientSecure client;
+BLYNK_CONNECTED() {
+  rtc.begin();
+}
+
 // Tên và mật khẩu wifi
-char ssid[] = "Wifi";
-char password[] = "27060204";
-// Chuỗi script lấy từ google sheet
-String GOOGLE_SCRIPT_ID = "AKfycbxJvvGNYh-R-GxEocnENVuEShpRrj_rpqjfN_DdW6irSzTa6eE7wFpjHD_m7qmFqQE6AA";
+constexpr char WIFI_SSID[] = "TP-LINK_D282AE";
+const char* ssid = "TP-LINK_D282AE";
+const char* password = "57971834";
+/*
+constexpr char WIFI_SSID[] = "";
+const char* ssid = "";
+const char* password = "hoilamgi";
+ */
+
+// Bỏ comment dòng script id tương ứng với từng mạch giá nuôi
+String GOOGLE_SCRIPT_ID = "AKfycbyNTqIPgAAZk0_j0tFaM61Lj5YA4ZXVStal7OzQub_NC1zeC6e4Ed4RiWDMqxChLoIWyQ"; // Google sheet giá A
+// String GOOGLE_SCRIPT_ID = "AKfycbwVRP5zSPQV5_bbOmCaKHSPMfo2yYDMtMz1Yy7XH6Sa-u1DzK_-_0n2o_g7tD2uwACbNQ"; // Google sheet giá B
+// String GOOGLE_SCRIPT_ID = "AKfycbwwLJclAnITIa7j9_qyCAExYpDgjjNnWP94iPa0qNXanaH0FOqiMK4T08GyxmUO1FhC"; // Google sheet giá C
+// String GOOGLE_SCRIPT_ID = "AKfycbyA6r_hmp84_okj3PAuK-rIpQy94Sa_fCPAV88NsqemtnVp3nY4HbjTBB4KdaWYK51Iig"; // Google sheet giá D
+
 // Địa chỉ MAC của mạch điều khiển
-uint8_t broadcastAddress[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+uint8_t broadcastAddress[] = {0xEC, 0x94, 0xCB, 0x4B, 0x48, 0x64};
+
+// Khai báo chân relay bật/tắt LEDs
+int LED = 21;
+// int LED = 22;
+const int AUTO = 1;
+const int MANUAL = 2;
 
 // Khai báo cảm biến ánh sáng
 // #define LUXMETER_1_PIN 35
@@ -60,28 +99,26 @@ float t_tb, h_tb;
 //Khai báo cân
 // Cân 1
 // #define calibration_factor_1 525680
-// #define LOADCELL_1_DOUT_PIN  5
-// #define LOADCELL_1_SCK_PIN  18
+// #define LOADCELL_1_DOUT_PIN  16
+// #define LOADCELL_1_SCK_PIN  17
 HX711 scale_1;
 float weight_lbs_1;
 float weight_1 = 0;
 //Cân 2
 // #define calibration_factor_2 525680
-// #define LOADCELL_2_DOUT_PIN  19
-// #define LOADCELL_2_SCK_PIN  21
+// #define LOADCELL_2_DOUT_PIN  5
+// #define LOADCELL_2_SCK_PIN  18
 HX711 scale_2;
 float weight_lbs_2;
 float weight_2 = 0;
 //Cân 3
 // #define calibration_factor_3 525680
-// #define LOADCELL_3_DOUT_PIN  3
-// #define LOADCELL_3_SCK_PIN  1
+// #define LOADCELL_3_DOUT_PIN  19
+// #define LOADCELL_3_SCK_PIN  23
 HX711 scale_3;
 float weight_lbs_3;
 float weight_3 = 0;
 
-BlynkTimer timer;
-WiFiClientSecure client;
 
 // Hàm gửi dữ liệu lên Blynk
 void sendSensors() {
@@ -123,28 +160,28 @@ void sendSensors() {
 }
 
 //Nối chuỗi
-String T_A() {
-  String T_A = String(t_1) + "," + String(t_2) + "," + String(t_3) + "," + String(t_4) 
+String Temps() {
+  String Temps = String(t_1) + "," + String(t_2) + "," + String(t_3) + "," + String(t_4) 
       + "," + String(t_5) + "," + String(t_6) + "," + String(t_7) + "," + String(t_8) 
       + "," + String(t_9) + "," + String(t_10) + "," + String(t_11) + "," + String(t_12);
-  return T_A;
+  return Temps;
 }
 
-String H_A() {
+String Humis() {
   String H_A = String(h_1) + "," + String(h_2) + "," + String(h_3) + "," + String(h_4) 
       + "," + String(h_5) + "," + String(h_6) + "," + String(h_7) + "," + String(h_8) 
       + "," + String(h_9) + "," + String(h_10) + "," + String(h_11) + "," + String(h_12);
-  return H_A;
+  return Humis;
 }
 
-String W_A() {
-  String W_A = String(weight_1) + "," + String(weight_2) + "," + String(weight_3);
-  return W_A;
+String Weights() {
+  String Weights = String(weight_1) + "," + String(weight_2) + "," + String(weight_3);
+  return Weights;
 }
 
-String LUX_A() {
-  String LUX_A = String(lux_1) + "," + String(lux_2) + "," + String(lux_3);
-  return LUX_A;
+String LUXs() {
+  String LUXs = String(lux_1) + "," + String(lux_2) + "," + String(lux_3);
+  return LUXs;
 }
 
 // Hàm gửi dữ liệu lên google sheet
@@ -201,17 +238,72 @@ void readLoadcell() {
 // gửi nhiệt độ, độ ẩm trung bình đến mạch điều khiển
 typedef struct struct_message {
     int id; // must be unique for each sender board
-    float t_tb;
-    float h_tb;
+    float t;
+    float h;
 } struct_message;
 
 struct_message myData;
 
-esp_now_peer_info_t peerInfo;
+int32_t getWiFiChannel(const char *ssid) {
+  if (int32_t n = WiFi.scanNetworks()) {
+      for (uint8_t i=0; i<n; i++) {
+          if (!strcmp(ssid, WiFi.SSID(i).c_str())) {
+              return WiFi.channel(i);
+          }
+      }
+  }
+  return 0;
+}
 
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
   Serial.print("\r\nLast Packet Send Status:\t");
   Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
+}
+
+// Điều khiển LED qua Blynk
+// 
+int LED_control_mode = AUTO;
+BLYNK_WRITE(V39) {
+  LED_control_mode = param.asInt();
+}
+
+void controlLED() {
+  if (LED_control_mode == AUTO) {auto_control_LED();}
+  if (LED_control_mode == MANUAL) {manual_control_LED();}
+}
+
+// Automatic control LEDs
+// Delare time variable
+int start_hour, start_min, stop_hour, stop_min;
+BLYNK_WRITE(V40) {
+  TimeInputParam t(param);
+  start_hour = t.getStartHour();
+  start_min = t.getStartMinute();
+  stop_hour = t.getStopHour();
+  stop_min = t.getStopMinute();
+}
+
+void auto_control_LED() {
+  time_t now = time(nullptr);
+  struct tm* p_tm = localtime(&now);
+  if (((int)p_tm->tm_hour == start_hour) && ((int)p_tm->tm_min == start_min)) {
+      digitalWrite(LED, 1);
+    }
+  if (((int)p_tm->tm_hour == stop_hour) && ((int)p_tm->tm_min == stop_min)) {
+      digitalWrite(LED, 0);
+    }
+}
+
+// Manual control LEDs
+// Initial LEDs' status value
+int LED_button = 0;
+BLYNK_WRITE(V41) {
+  LED_button = param.asInt();
+}
+
+void manual_control_LED() {
+  if (LED_button == 1) {digitalWrite(LED, 1);}
+  if (LED_button == 0) {digitalWrite(LED, 0);}
 }
 
 
@@ -220,8 +312,12 @@ void setup() {
   Serial.begin(115200);
   delay(10);
 
+  pinMode(LED, OUTPUT);
+  digitalWrite(LED, 0);
+  
   // Set wifi
-  WiFi.mode(WIFI_STA);
+  WiFi.mode(WIFI_AP_STA);
+  
   WiFi.begin(ssid, password);
   int wifi_ctr = 0;
   Serial.println("Đang khởi động");
@@ -232,6 +328,14 @@ void setup() {
   }
   Serial.println();
   Serial.println("Đã kết nối. Bắt đầu hoạt động.");
+
+  int32_t channel = getWiFiChannel(WIFI_SSID);
+
+  WiFi.printDiag(Serial); // Uncomment to verify channel number before
+  esp_wifi_set_promiscuous(true);
+  esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
+  esp_wifi_set_promiscuous(false);
+  WiFi.printDiag(Serial);
 
   // Set DHT
   dht_1.begin();
@@ -260,17 +364,21 @@ void setup() {
   */
 
   // Set Blynk
-  Blynk.begin(auth, ssid, password,"sv.bangthong.com", 8080);
+  Blynk.begin(auth, ssid, password,"blynk-server.com", 8080);
   timer.setInterval(timedelay, sendSensors);
+  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
 
   // Khởi tạo ESP-NOW
   if (esp_now_init() != ESP_OK) {
     Serial.println("Lỗi khởi tạo ESP-NOW");
     return;
   }
+  
   esp_now_register_send_cb(OnDataSent);
-  memcpy(peerInfo.peer_addr, broadcastAddress, 6);
-  peerInfo.channel = 0;  
+
+  //Register peer
+  esp_now_peer_info_t peerInfo;
+  memcpy(peerInfo.peer_addr, broadcastAddress, 6);  
   peerInfo.encrypt = false;
   
   // Thêm peer        
@@ -285,11 +393,13 @@ void loop() {
   Blynk.run();
   timer.run();
   readDHT22();
-  readLoadcell();
+  //readLoadcell();
+  controlLED(); 
   
   unsigned long currentMillis = millis();
   if (currentMillis - previousMillis >= timedelay) {
-    previousMillis = currentMillis;       
+    previousMillis = currentMillis;
+    // Reconnect wifi       
     if (WiFi.status() != WL_CONNECTED) {
       WiFi.disconnect();
       WiFi.reconnect();
@@ -297,7 +407,7 @@ void loop() {
     
     Serial.println(t_1);
     Serial.println(h_1);
-    Serial.println(t_2);
+    /*Serial.println(t_2);
     Serial.println(h_2);
     Serial.println(t_3);
     Serial.println(h_3);
@@ -319,11 +429,14 @@ void loop() {
     Serial.println(h_11);
     Serial.println(t_12);
     Serial.println(h_12);
-    Serial.println(weight_1);
+    Serial.println(weight_1);*/
     // Gửi dữ liệu lên mạch điều khiển
-    myData.id = 1;
-    myData.t_tb = t_tb;
-    myData.h_tb = h_tb;
+    myData.id = 1; // Giá A
+    // myData.id = 2; // Giá B
+    // myData.id = 3; // Giá C
+    // myData.id = 4; // Giá D
+    myData.t = t_tb;
+    myData.h = h_tb;
     esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *) &myData, sizeof(myData));
     if (result == ESP_OK) {
     Serial.println("Gửi dữ liệu thành công");
@@ -333,9 +446,9 @@ void loop() {
     }
     
     // Gửi dữ liệu lên Sheet
-    sendData("T_A1,T_A2,T_A3,T_A4,T_A5,T_A6,T_A7,T_A8,T_A9,T_A10,T_A11,T_A12=" + T_A()
-           + "&H_A1,H_A2,H_A3,H_A4,H_A5,H_A6,H_A7,H_A8,H_A9,H_A10,H_A11,H_A12=" + H_A()
-           + "&W_A1,W_A2,W_A3=" + W_A()
-           + "&L_A1,L_A2,L_A3=" + LUX_A());
+    sendData("T_1,T_2,T_3,T_4,T_5,T_6,T_7,T_8,T_9,T_10,T_11,T_12=" + Temps()
+           + "&H_1,H_2,H_3,H_4,H_5,H_6,H_7,H_8,H_9,H_10,H_11,H_12=" + Humis()
+           + "&W_1,W_2,W_3=" + Weights()
+           + "&L_1,L_2,L_3=" + LUXs());
   }
 }

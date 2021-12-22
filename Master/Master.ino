@@ -8,8 +8,8 @@
 #include <WidgetRTC.h>
 #include <esp_now.h>
 
-const char* ssid     = "Wifi";
-const char* password = "27060204";
+const char* ssid     = "TP-LINK_D282AE";
+const char* password = "57971834";
 const int AUTO = 1;
 const int MANUAL = 2;
 const int ON = 1;
@@ -24,7 +24,7 @@ char timeMin[3];
 
 // Khai báo Blynk
 #define BLYNK_PRINT Serial
-char auth[] = "9NXkkZnJO2-1aUxPfmxDHPtBnJgUJW1O";
+char auth[] = "hK5VMmdXyRphOIFZKDvNdX8rre8DEkp8";
 unsigned long previousMillis = 0;
 const long timedelay = 10000;
 BlynkTimer timer;
@@ -35,17 +35,19 @@ BLYNK_CONNECTED() {
 }
 
 //Khai báo chân relay
-int humi_pump = 18;
-int humi_us = 5;
-int re_pump = 17;
-int UVw = 17;
-int UVws = 17;
-int ven_fan = 4;
+int humi_pump = 23;
+int humi_us = 13;
+int re_pump = 19;
+int UVw = 18;
+int UVws = 5;
+int ven_fan = 17;
 int UVa = 16;
 
 //*********************ĐIỀU KHIỂN ẨM***********************//
 /////////////////////////////////////////////////////////////
-int t_tb = 0, h_tb = 0;
+float t_tb = 0, h_tb = 0;
+float t_A = 0, t_B = 0, t_C = 0, t_D = 0;
+float h_A = 0, h_B = 0, h_C = 0, h_D = 0;
 void sendDHT() {
   Blynk.virtualWrite(V0, t_tb);
   Blynk.virtualWrite(V1, h_tb);
@@ -55,37 +57,37 @@ void sendDHT() {
 // Tạo structure để nhận data
 typedef struct struct_message {
   int id;
-  float t_tb;
-  float h_tb;
+  float t;
+  float h;
 } struct_message;
 
 // Tạo struct myData
 struct_message myData;
 
 // Tạo struct để chứa dữ liệu từ mỗi board
-struct_message boardA;
-struct_message boardB;
-struct_message boardC;
-struct_message boardD;
+struct_message board1;
+struct_message board2;
+struct_message board3;
+struct_message board4;
 
 // Tạo array chứa tất cả struct
-struct_message boardsStruct[4] = {boardA, boardB, boardC, boardD};
+struct_message boardsStruct[4] = {board1, board2, board3, board4};
 
 // Gọi hàm được thực thi khi nhận data
 void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) {
   char macStr[18];
-  Serial.print("Nhận dữ liệu từ: ");
+  //Serial.print("Nhận dữ liệu từ: ");
   snprintf(macStr, sizeof(macStr), "%02x:%02x:%02x:%02x:%02x:%02x",
            mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
-  Serial.println(macStr);
+  //Serial.println(macStr);
   memcpy(&myData, incomingData, sizeof(myData));
-  Serial.printf("Board ID %u: %u bytes\n", myData.id, len);
+  //Serial.printf("Board ID %u: %u bytes\n", myData.id, len);
   // update structure với dữ liệu mới nhận
-  boardsStruct[myData.id-1].t_tb = myData.t_tb;
-  boardsStruct[myData.id-1].h_tb = myData.h_tb;
-  Serial.printf("x value: %d \n", boardsStruct[myData.id-1].t_tb);
-  Serial.printf("y value: %d \n", boardsStruct[myData.id-1].h_tb);
-  Serial.println();
+  boardsStruct[myData.id-1].t = myData.t;
+  boardsStruct[myData.id-1].h = myData.h;
+  //Serial.printf("t value: %.2f \n", boardsStruct[myData.id-1].t);
+  //Serial.printf("h value: %.2f \n", boardsStruct[myData.id-1].h);
+  //Serial.println();
 }
 
 //Điều khiển bơm phun sương từ Blynk
@@ -209,9 +211,11 @@ void auto_re_pump() {
   struct tm* re_pump_p_tm = localtime(&re_pump_now);
   int re_pump_off_h, re_pump_off_min;  
   delay(4000);
+  
   if (((re_pump_blynk_h == 0)&&(re_pump_blynk_min == 0))||(re_pump_cycle == 0)) {i_rp = 0;}
   if (re_pump_RESET == 1) {i_rp = 0;}
   Serial.println(i_rp);
+  
   re_pump_on_h = (re_pump_blynk_h + re_pump_cycle*i_rp)%24;
   re_pump_on_min = re_pump_blynk_min;
   Serial.println(String("re_pump start: ") + re_pump_on_h +":" +re_pump_on_min);
@@ -219,13 +223,15 @@ void auto_re_pump() {
     digitalWrite(re_pump, 1);
     Serial.println("re_pump is ON");
   }
-  re_pump_off_h = (re_pump_on_h + (re_pump_acttime)/60)%24;
+  
+  re_pump_off_h = (re_pump_on_h + (re_pump_on_min + re_pump_acttime)/60)%24;
   re_pump_off_min = (re_pump_on_min + re_pump_acttime)%60;
   Serial.println(String("re_pump stop: ") + re_pump_off_h +":" +re_pump_off_min);
   if (((int)re_pump_p_tm->tm_hour == re_pump_off_h) && ((int)re_pump_p_tm->tm_min == re_pump_off_min) && (re_pump_cycle != 0)) {
     digitalWrite(re_pump, 0);
     Serial.println("re_pump is OFF");
   }
+  
   unsigned long re_pump_c_millis = millis();
   if ((re_pump_c_millis - re_pump_p_millis) >= re_pump_cycle*60*60*1000) {
     re_pump_p_millis = re_pump_c_millis;
@@ -280,29 +286,33 @@ void auto_UVw() {
   struct tm* UVw_p_tm = localtime(&UVw_now);
   int UVw_off_h, UVw_off_min;  
   delay(4000);
+  
   if (((UVw_blynk_h == 0)&&(UVw_blynk_min == 0))||(UVw_cycle == 0)) {i = 0;}
   if (UVw_RESET == 1) {i = 0;}
-  Serial.println(i);
+  //Serial.println(i);
+  
   UVw_on_h = (UVw_blynk_h + UVw_cycle*i)%24;
   UVw_on_min = UVw_blynk_min;
-  Serial.println(String("UVw start: ") + UVw_on_h +":" +UVw_on_min);
+  //Serial.println(String("UVw start: ") + UVw_on_h +":" +UVw_on_min);
   if (((int)UVw_p_tm->tm_hour == UVw_on_h) && ((int)UVw_p_tm->tm_min == UVw_on_min) && (UVw_cycle != 0)) {
     digitalWrite(UVw, 1);
-    Serial.println("UVw is ON");
+    //Serial.println("UVw is ON");
   }
-  UVw_off_h = (UVw_on_h + (UVw_acttime)/60)%24;
+  
+  UVw_off_h = (UVw_on_h + (UVw_on_min + UVw_acttime)/60)%24;
   UVw_off_min = (UVw_on_min + UVw_acttime)%60;
-  Serial.println(String("UVw stop: ") + UVw_off_h +":" +UVw_off_min);
+  //Serial.println(String("UVw stop: ") + UVw_off_h +":" +UVw_off_min);
   if (((int)UVw_p_tm->tm_hour == UVw_off_h) && ((int)UVw_p_tm->tm_min == UVw_off_min) && (UVw_cycle != 0)) {
     digitalWrite(UVw, 0);
-    Serial.println("UVw is OFF");
+    //Serial.println("UVw is OFF");
   }
+  
   unsigned long UVw_c_millis = millis();
   if ((UVw_c_millis - UVw_p_millis) >= UVw_cycle*60*60*1000) {
     UVw_p_millis = UVw_c_millis;
     i++; 
   }
-  Serial.println(digitalRead(UVw));
+  //Serial.println(digitalRead(UVw));
 }
 //Bật tắt UV nước thủ công
 int UVw_button = 0;
@@ -351,29 +361,33 @@ void auto_UVws() {
   struct tm* UVws_p_tm = localtime(&UVws_now);
   int UVws_off_h, UVws_off_min;  
   delay(4000);
+  
   if (((UVws_blynk_h == 0)&&(UVws_blynk_min == 0))||(UVws_cycle == 0)) {i_s = 0;}
   if (UVws_RESET == 1) {i_s = 0;}
-  Serial.println(i_s);
+  //Serial.println(i_s);
+  
   UVws_on_h = (UVws_blynk_h + UVws_cycle*i_s)%24;
   UVws_on_min = UVws_blynk_min;
-  Serial.println(String("UVws start: ") + UVws_on_h +":" +UVws_on_min);
+  //Serial.println(String("UVws start: ") + UVws_on_h +":" +UVws_on_min);
   if (((int)UVws_p_tm->tm_hour == UVws_on_h) && ((int)UVws_p_tm->tm_min == UVws_on_min) && (UVws_cycle != 0)) {
     digitalWrite(UVws, 1);
-    Serial.println("UVws is ON");
+    //Serial.println("UVws is ON");
   }
-  UVws_off_h = (UVws_on_h + (UVws_acttime)/60)%24;
+  
+  UVws_off_h = (UVws_on_h + (UVws_on_min + UVws_acttime)/60)%24;
   UVws_off_min = (UVws_on_min + UVws_acttime)%60;
-  Serial.println(String("UVws stop: ") + UVws_off_h +":" +UVws_off_min);
+  //Serial.println(String("UVws stop: ") + UVws_off_h +":" +UVws_off_min);
   if (((int)UVws_p_tm->tm_hour == UVws_off_h) && ((int)UVws_p_tm->tm_min == UVws_off_min) && (UVws_cycle != 0)) {
     digitalWrite(UVws, 0);
-    Serial.println("UVws is OFF");
+    //Serial.println("UVws is OFF");
   }
+  
   unsigned long UVws_c_millis = millis();
   if ((UVws_c_millis - UVws_p_millis) >= UVws_cycle*60*60*1000) {
     UVws_p_millis = UVws_c_millis;
     i_s++; 
   }
-  Serial.println(digitalRead(UVws));
+  //Serial.println(digitalRead(UVws));
 }
 // Manual mode
 int UVws_button = 0;
@@ -469,9 +483,11 @@ void auto_UVa() {
   struct tm* UVa_p_tm = localtime(&UVa_now);
   int UVa_off_h, UVa_off_min;
   delay(4000);  
+  
   if (((UVa_blynk_h == 0)&&(UVa_blynk_min == 0))||(UVa_cycle == 0)) {ia = 0;}
   if (UVa_RESET == 1) {ia = 0;}
   Serial.println(ia);
+  
   UVa_on_h = (UVa_blynk_h + UVa_cycle*ia)%24;
   UVa_on_min = UVa_blynk_min;
   Serial.println(String("UVa start: ") + UVa_on_h +":" +UVa_on_min);
@@ -479,13 +495,15 @@ void auto_UVa() {
     digitalWrite(UVa, 1);
     Serial.println("UVa is ON");
   }
-  UVa_off_h = (UVa_on_h + (UVa_acttime)/60)%24;
+  
+  UVa_off_h = (UVa_on_h + (UVa_on_min + UVa_acttime)/60)%24;
   UVa_off_min = (UVa_on_min + UVa_acttime)%60;
   Serial.println(String("UVa stop: ") + UVa_off_h +":" +UVa_off_min);
   if (((int)UVa_p_tm->tm_hour == UVa_off_h) && ((int)UVa_p_tm->tm_min == UVa_off_min) && (UVa_cycle != 0)) {
     digitalWrite(UVa, 0);
     Serial.println("UVa is OFF");
   }
+  
   unsigned long UVa_c_millis = millis();
   if ((UVa_c_millis - UVa_p_millis) >= UVa_cycle*60*60*1000) {
     UVa_p_millis = UVa_c_millis;
@@ -506,124 +524,29 @@ void manual_UVa() {
 
 
 
-//*********************Control LEDs section***********************/////////////////
-/////////////////////////////////////////////////////////////////////////////
-
-// LED pins
-int LED_A = 4, LED_B = 2, LED_C = 0, LED_D = 15;
-// Get control mode from Blynk
-int LED_control_mode = AUTO;
-BLYNK_WRITE(V39) {
-  LED_control_mode = param.asInt();
-}
-
-void controlLED() {
-  if (LED_control_mode == AUTO) {auto_LED();}
-  if (LED_control_mode == MANUAL) {manual_control_LED();}
-}
-
-// Automatic control LEDs
-// Delare time variable
-int start_hour_A, start_min_A, stop_hour_A, stop_min_A;
-int start_hour_B, start_min_B, stop_hour_B, stop_min_B;
-int start_hour_C, start_min_C, stop_hour_C, stop_min_C;
-int start_hour_D, start_min_D, stop_hour_D, stop_min_D;
-
-BLYNK_WRITE(V40) {
-  TimeInputParam t_A(param);
-  start_hour_A = t_A.getStartHour();
-  start_min_A = t_A.getStartMinute();
-  stop_hour_A = t_A.getStopHour();
-  stop_min_A = t_A.getStopMinute();
-}
-BLYNK_WRITE(V42) {
-  TimeInputParam t_B(param);
-  start_hour_B = t_B.getStartHour();
-  start_min_B = t_B.getStartMinute();
-  stop_hour_B = t_B.getStopHour();
-  stop_min_B = t_B.getStopMinute();
-}
-BLYNK_WRITE(V44) {
-  TimeInputParam t_C(param);
-  start_hour_C = t_C.getStartHour();
-  start_min_C = t_C.getStartMinute();
-  stop_hour_C = t_C.getStopHour();
-  stop_min_C = t_C.getStopMinute();
-}
-BLYNK_WRITE(V46) {
-  TimeInputParam t_D(param);
-  start_hour_D = t_D.getStartHour();
-  start_min_D = t_D.getStartMinute();
-  stop_hour_D = t_D.getStopHour();
-  stop_min_D = t_D.getStopMinute();
-}
-void auto_LED() {
-  time_t now = time(nullptr);
-  struct tm* p_tm = localtime(&now);
-  if (((int)p_tm->tm_hour == start_hour_A) && ((int)p_tm->tm_min == start_min_A)) {
-      digitalWrite(LED_A, 1);
-    }
-  if (((int)p_tm->tm_hour == stop_hour_A) && ((int)p_tm->tm_min == stop_min_A)) {
-      digitalWrite(LED_A, 0);
-    }
-  if (((int)timeHour == start_hour_B) && ((int)timeMin == start_min_B)) {
-      digitalWrite(LED_B, 1);
-    }
-  if (((int)timeHour == stop_hour_B) && ((int)timeMin == stop_min_B)) {
-      digitalWrite(LED_B, 0);
-    }
-  if (((int)timeHour == start_hour_C) && ((int)timeMin == start_min_C)) {
-      digitalWrite(LED_C, 1);
-    }
-  if (((int)timeHour == stop_hour_C) && ((int)timeMin == stop_min_C)) {
-      digitalWrite(LED_C, 0);
-    }
-  if (((int)timeHour == start_hour_D) && ((int)timeMin == start_min_D)) {
-      digitalWrite(LED_D, 1);
-    }
-  if (((int)timeHour == stop_hour_D) && ((int)timeMin == stop_min_D)) {
-      digitalWrite(LED_D, 0);
-    }
-}
-// Manual control LEDs
-// Initial LEDs' status value
-int LED_A_button = 0, LED_B_button = 0, LED_C_button = 0, LED_D_button = 0;
-BLYNK_WRITE(V41) {
-  LED_A_button = param.asInt();
-}
-BLYNK_WRITE(V43) {
-  LED_B_button = param.asInt();
-}
-BLYNK_WRITE(V45) {
-  LED_C_button = param.asInt();
-}
-BLYNK_WRITE(V47) {
-  LED_D_button = param.asInt();
-}
-void manual_control_LED() {
-  if (LED_A_button == 1) {digitalWrite(LED_A, 1);}
-  if (LED_A_button == 0) {digitalWrite(LED_A, 0);}
-  if (LED_B_button == 1) {digitalWrite(LED_B, 1);}
-  if (LED_B_button == 0) {digitalWrite(LED_B, 0);}
-  if (LED_C_button == 1) {digitalWrite(LED_C, 1);}
-  if (LED_C_button == 0) {digitalWrite(LED_C, 0);}
-  if (LED_D_button == 1) {digitalWrite(LED_D, 1);}
-  if (LED_D_button == 0) {digitalWrite(LED_D, 0);}
-}
-///////////////////////////////////////////////////////////////////////////////////////
-
-
 void setup() {
   Serial.begin(115200);
   delay(10);
-  WiFi.mode(WIFI_STA);
+  WiFi.mode(WIFI_AP_STA);
   WiFi.begin(ssid, password);
   int wifi_ctr = 0;
+
+  pinMode(humi_pump, OUTPUT);
+  pinMode(humi_us, OUTPUT);
+  pinMode(re_pump, OUTPUT);
   pinMode(UVw, OUTPUT);
-  pinMode(LED_A, OUTPUT);
-  pinMode(LED_B, OUTPUT);
-  pinMode(LED_C, OUTPUT);
-  pinMode(LED_D, OUTPUT);
+  pinMode(UVws, OUTPUT);
+  pinMode(ven_fan, OUTPUT);
+  pinMode(UVa, OUTPUT);
+
+  digitalWrite(humi_pump, 0);
+  digitalWrite(humi_us, 0);
+  digitalWrite(re_pump, 0);
+  digitalWrite(UVw, 0);
+  digitalWrite(UVws, 0);
+  digitalWrite(ven_fan, 0);
+  digitalWrite(UVa, 0);
+
   Serial.println("Starting...");
   Serial.print("Connecting...");
   while (WiFi.status() != WL_CONNECTED) {
@@ -649,12 +572,10 @@ void setup() {
 }
 
 void loop() {
+  int count_t = 0;
+  int count_h = 0;
   Blynk.run();
   timer.run();
-  t_tb = (boardsStruct[0].t_tb + boardsStruct[1].t_tb
-          + boardsStruct[2].t_tb + boardsStruct[3].t_tb);
-  h_tb = (boardsStruct[0].h_tb + boardsStruct[1].h_tb
-          + boardsStruct[2].h_tb + boardsStruct[3].h_tb);
   sendDHT();
   controlhumi_pump();
   controlhumi_us();
@@ -663,12 +584,29 @@ void loop() {
   controlUVws();
   control_ven_fan();
   //controlUVa();
-  controlLED();
   unsigned long currentMillis = millis();
   // If wifi is disconnect in more than 30 secs, then reconnect wifi       
-  if ((WiFi.status() != WL_CONNECTED) && (currentMillis - previousMillis >= 30000)) {
-     WiFi.disconnect();
-     WiFi.reconnect();
-     previousMillis = currentMillis;
+  if (currentMillis - previousMillis >= timedelay) {
+    previousMillis = currentMillis;       
+    if (WiFi.status() != WL_CONNECTED) {
+      WiFi.disconnect();
+      WiFi.reconnect();
+    }
+
+    // Tính nhiệt độ, độ ẩm trung bình cả phòng
+    t_A = boardsStruct[0].t; if (t_A > 0) {count_t = count_t + 1;}
+    t_B = boardsStruct[1].t; if (t_B > 0) {count_t = count_t + 1;}
+    t_C = boardsStruct[2].t; if (t_C > 0) {count_t = count_t + 1;}
+    t_D = boardsStruct[3].t; if (t_D > 0) {count_t = count_t + 1;}
+
+    h_A = boardsStruct[0].h; if (h_A > 0) {count_h = count_h + 1;}
+    h_B = boardsStruct[1].h; if (h_B > 0) {count_h = count_h + 1;}
+    h_C = boardsStruct[2].h; if (h_C > 0) {count_h = count_h + 1;}
+    h_D = boardsStruct[3].h; if (h_D > 0) {count_h = count_h + 1;}
+    
+    t_tb = (t_A + t_B + t_C + t_D)/count_t;
+    //Serial.println(t_tb);
+    h_tb = (h_A + h_B + h_C + h_D)/count_h;
+    //Serial.println(h_tb);
   }
 }
